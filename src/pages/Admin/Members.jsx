@@ -4,6 +4,8 @@ import {
   deleteValidationMember,
   getImportConflicts,
   getValidationData,
+  importSteamojiMembers,
+  getSteamojiTokenStatus,
   updateValidationMember,
 } from '../../api/sheets.js'
 import Pagination from '../../components/Pagination.jsx'
@@ -395,6 +397,7 @@ export default function Members({ branches = [] }) {
   const [branchFilter, setBranchFilter] = useState('all')
   const [page, setPage] = useState(1)
   const [editing, setEditing] = useState(null) // null | 'new' | memberObject
+  const [showImport, setShowImport] = useState(false)
 
   // Keep conflict badge count up to date
   const refreshConflictCount = useCallback(() => {
@@ -552,13 +555,19 @@ export default function Members({ branches = [] }) {
         <span className="caption muted" style={{ margin: 0 }}>
           Member records used for sign-in, pricing, and branches.
         </span>
-        <div className="row" style={{ gap: 8 }}>
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
           <button
             style={{ padding: '8px 14px', fontSize: 14 }}
             onClick={load}
             disabled={loading}
           >
             {loading ? 'Loading…' : 'Refresh'}
+          </button>
+          <button
+            style={{ padding: '8px 14px', fontSize: 14 }}
+            onClick={() => setShowImport(true)}
+          >
+            Import from Steamoji…
           </button>
           <button
             className="primary"
@@ -652,6 +661,15 @@ export default function Members({ branches = [] }) {
           branches={branches}
           onCancel={() => setEditing(null)}
           onSave={onSave}
+        />
+      )}
+
+      {showImport && (
+        <SteamojiImportModal
+          branches={branches}
+          branchMap={branchMap}
+          onClose={() => setShowImport(false)}
+          onDone={() => { load(); refreshConflictCount() }}
         />
       )}
 

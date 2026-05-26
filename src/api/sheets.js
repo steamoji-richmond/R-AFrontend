@@ -55,7 +55,12 @@ async function postJson(action, payload, params) {
   })
   if (res.status === 405) {
     throw new Error(
-      '405 Method Not Allowed: Redeploy your Google Apps Script Web App (URL must end with /exec, access "Anyone").'
+      '405 Method Not Allowed: API URL must end with /exec (e.g. http://your-server:4000/exec).'
+    )
+  }
+  if (res.status === 404) {
+    throw new Error(
+      '404 Not Found: Check VITE_API_URL — it must point to the backend /exec endpoint, not the server root.'
     )
   }
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
