@@ -1,9 +1,10 @@
 /**
  * Frontend runtime config.
  *
- * VITE_API_URL in .env is only used on localhost.
- * On steamoji.online (and any live host), API calls always go to /exec
- * (Vercel serverless proxy → GCP) to avoid CORS and mixed-content errors.
+ * VITE_API_URL is only used on localhost.
+ * On any live host, always use relative /exec (same origin as the page).
+ * Important: www.steamoji.online and steamoji.online are different origins —
+ * never use an absolute https://steamoji.online/exec URL in production.
  */
 
 function normalizeApiUrl(raw) {
@@ -19,40 +20,15 @@ function isLocalHost(hostname) {
   return hostname === 'localhost' || hostname === '127.0.0.1'
 }
 
-function isIpAddressUrl(url) {
-  try {
-    const { hostname } = new URL(url)
-    return /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)
-  } catch {
-    return false
-  }
-}
-
-/** Called at request time — never rely on a URL baked in at module load. */
+/** Called at request time so the URL always matches the current host (www or not). */
 export function getApiUrl() {
   const fromEnv = import.meta.env.VITE_API_URL?.trim()
 
-  if (typeof window === 'undefined') {
-    return normalizeApiUrl(fromEnv || 'http://localhost:4000/exec')
-  }
-
-  const { hostname } = window.location
-
-  if (isLocalHost(hostname)) {
-    return normalizeApiUrl(fromEnv || 'http://localhost:4000/exec')
-  }
-
-  // Live site: use same-origin proxy unless env is a real HTTPS API domain
-  if (
-    !fromEnv ||
-    fromEnv.startsWith('/') ||
-    fromEnv.startsWith('http://') ||
-    isIpAddressUrl(fromEnv)
-  ) {
+  if (typeof window !== 'undefined' && !isLocalHost(window.location.hostname)) {
     return '/exec'
   }
 
-  return normalizeApiUrl(fromEnv)
+  return normalizeApiUrl(fromEnv || 'http://localhost:4000/exec')
 }
 
 const config = {
