@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/exec",
-      "destination": "http://35.233.224.158:4000/exec"
+      "destination": "/api/exec"
     },
     {
       "source": "/(.*)",
