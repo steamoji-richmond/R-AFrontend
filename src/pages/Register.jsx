@@ -49,59 +49,44 @@ export default function Register() {
   const [cancellingId, setCancellingId] = useState(null)
   const [paymentConfirm, setPaymentConfirm] = useState(null) // { session, price }
 
-  const refreshAll = useCallback(async (force = true) => {
-    const parentEmail = email.trim().toLowerCase()
-    const [s, r] = await Promise.all([
-      getSessionsFromSheets(),
-      parentEmail
-        ? getRegistrationsFromSheets({ forceRefresh: force, email: parentEmail })
-        : Promise.resolve([]),
-    ])
+  const loadSessions = useCallback(async () => {
+    const s = await getSessionsFromSheets()
     setSessions(s || [])
+    clearCapacityCache()
+  }, [])
+
+  const loadRegistrations = useCallback(async (parentEmail, force = true) => {
+    const emailKey = (parentEmail || '').trim().toLowerCase()
+    if (!emailKey) {
+      setRegistrations([])
+      return
+    }
+    const r = await getRegistrationsFromSheets({
+      forceRefresh: force,
+      email: emailKey,
+    })
     setRegistrations(r || [])
     clearCapacityCache()
-  }, [email])
+  }, [])
+
+  const refreshMemberData = useCallback(
+    async (parentEmail, force = true) => {
+      await Promise.all([
+        loadSessions(),
+        loadRegistrations(parentEmail, force),
+      ])
+    },
+    [loadSessions, loadRegistrations]
+  )
 
   useEffect(() => {
-    refreshAll(false)
-    // Branch metadata is only needed for display (branch name on each card)
-    // and doesn't change often, so we load it once when the page mounts.
+    loadSessions()
     getBranches({ activeOnly: false }).then((list) => {
       setBranches(Array.isArray(list) ? list : [])
     })
-  }, [refreshAll])
+  }, [loadSessions])
 
-  const branchById = useMemo(() => {
-    const m = {}
-    for (const b of branches) m[b.id] = b
-    return m
-  }, [branches])
-
-  /**
-   * Set of branch ids this member can register in. The server includes
-   * `visibleBranchIds` on the lookup response (their own branches + every
-   * branch linked to one of them). If the field is missing (old payload)
-   * we fall back to the raw `branchIds`. A null result means "no filter"
-   * so legacy members without any branchIds can still see everything.
-   */
-  const visibleBranchIds = useMemo(() => {
-    if (!selectedMember) return null
-    const raw =
-      selectedMember.visibleBranchIds ||
-      selectedMember.branchIds ||
-      []
-    return Array.isArray(raw) && raw.length ? new Set(raw) : null
-  }, [selectedMember])
-
-  // Sessions that belong to a branch the member can register at. Sessions
-  // with no branchId are shown to everyone (legacy / un-migrated data).
-  const sessionsForMember = useMemo(() => {
-    if (!visibleBranchIds) return sessions
-    return (sessions || []).filter((s) => {
-      const bid = s.branchId || ''
-      return !bid || visibleBranchIds.has(bid)
-    })
-  }, [sessions, visibleBranchIds])
+  const [searchedEmail, setSearchedEmail] = useState('')
 
   const searchByEmail = async () => {
     const q = email.trim().toLowerCase()
@@ -109,6 +94,7 @@ export default function Register() {
       alert('Please enter an email address')
       return
     }
+    setSearchedEmail(q)
     setEmailStatus({ text: 'Looking up members...', color: '' })
     setMembers([])
     setSelectedMember(null)
@@ -140,6 +126,8 @@ export default function Register() {
   const onNewMemberCreated = (member) => {
     setShowNewMemberForm(false)
     setSelectedMember(member)
+    const pe = (member.parentEmail || searchedEmail || email).trim().toLowerCase()
+    if (pe) setSearchedEmail(pe)
     setEmailStatus({
       text:
         'Account submitted. An admin will review and approve it before you can register.',
@@ -148,6 +136,7 @@ export default function Register() {
   }
 
   const clearAll = () => {
+    setSearchedEmail('')
     setEmail('')
     setEmailStatus({ text: '', color: '' })
     setMembers([])
@@ -155,16 +144,39 @@ export default function Register() {
     setShowNewMemberForm(false)
   }
 
-  // Reload freshest data whenever the user selects a member or switches tabs to make counts accurate
+  // Reload sessions + this member's registrations after search / selection.
   useEffect(() => {
-    if (!selectedMember) return
+    if (!selectedMember || !searchedEmail) return
     setLoadingEligible(true)
     setLoadingRegistered(true)
-    refreshAll(true).finally(() => {
+    refreshMemberData(searchedEmail, true).finally(() => {
       setLoadingEligible(false)
       setLoadingRegistered(false)
     })
-  }, [selectedMember, refreshAll])
+  }, [selectedMember, searchedEmail, refreshMemberData])
+
+  const branchById = useMemo(() => {
+    const m = {}
+    for (const b of branches) m[b.id] = b
+    return m
+  }, [branches])
+
+  const visibleBranchIds = useMemo(() => {
+    if (!selectedMember) return null
+    const raw =
+      selectedMember.visibleBranchIds ||
+      selectedMember.branchIds ||
+      []
+    return Array.isArray(raw) && raw.length ? new Set(raw) : null
+  }, [selectedMember])
+
+  const sessionsForMember = useMemo(() => {
+    if (!visibleBranchIds) return sessions
+    return (sessions || []).filter((s) => {
+      const bid = s.branchId || ''
+      return !bid || visibleBranchIds.has(bid)
+    })
+  }, [sessions, visibleBranchIds])
 
   const upcoming = useMemo(
     () => listUpcoming(sessionsForMember),
@@ -174,7 +186,7 @@ export default function Register() {
   const eligibleItems = useMemo(() => {
     if (!selectedMember) return []
     const badgeId = selectedMember.badgeId || ''
-    const parentEmail = email.trim().toLowerCase()
+    const parentEmail = searchedEmail
     const items = []
     for (const s of upcoming) {
       const seatsLeft = capLeft(s)
@@ -190,12 +202,12 @@ export default function Register() {
       }
     }
     return items
-  }, [selectedMember, email, upcoming, registrations])
+  }, [selectedMember, searchedEmail, upcoming, registrations])
 
   const registeredItems = useMemo(() => {
     if (!selectedMember) return []
     const badgeId = selectedMember.badgeId || ''
-    const parentEmail = email.trim().toLowerCase()
+    const parentEmail = searchedEmail
     // Intentionally search across *all* sessions here (not sessionsForMember).
     // If the admin moved a session to a different branch or unlinked
     // branches after a registration was made, we still want the user to be
@@ -207,7 +219,7 @@ export default function Register() {
     })
     list.sort((a, b) => new Date(a.dt) - new Date(b.dt))
     return list
-  }, [selectedMember, sessions, registrations, email])
+  }, [selectedMember, searchedEmail, sessions, registrations])
 
   // pagination
   const eligibleTotalPages = Math.max(1, Math.ceil(eligibleItems.length / ELIGIBLE_PER_PAGE))
@@ -245,7 +257,7 @@ export default function Register() {
       alert('Please search for your email and select a member to register.')
       return
     }
-    const parentEmail = email.trim().toLowerCase()
+    const parentEmail = searchedEmail
     if (!parentEmail) {
       alert('Email is required')
       return
@@ -258,7 +270,7 @@ export default function Register() {
       const seatsLeft = capLeft(freshSession)
       if (seatsLeft <= 0) {
         alert('This session is full. Please select another session.')
-        await refreshAll(true)
+        await refreshMemberData(parentEmail, true)
         return
       }
       const latestRegs = await getRegistrationsFromSheets({
@@ -275,7 +287,7 @@ export default function Register() {
         alert(
           'This member has already registered for a session this month. Each member can only register once per month.'
         )
-        await refreshAll(true)
+        await refreshMemberData(parentEmail, true)
         return
       }
 
@@ -324,7 +336,7 @@ export default function Register() {
               (err.message || 'Unknown error') +
               '\nPlease contact support to complete your payment.'
           )
-          await refreshAll(true)
+          await refreshMemberData(parentEmail, true)
         }
         return
       }
@@ -332,7 +344,7 @@ export default function Register() {
       // Free or membership-covered — confirm immediately
       showSuccess('Registration Successful!')
       showToast('Registration saved')
-      await refreshAll(true)
+      await refreshMemberData(parentEmail, true)
     } catch (err) {
       console.error('Registration error:', err)
       alert('Error saving registration: ' + (err.message || 'Unknown error'))
@@ -343,7 +355,7 @@ export default function Register() {
 
   const cancelRegistration = async (s) => {
     if (!confirm('Are you sure you want to cancel this registration?')) return
-    const parentEmail = email.trim().toLowerCase()
+    const parentEmail = searchedEmail
     setCancellingId(s.id)
     try {
       const regsLatest = await getRegistrationsFromSheets({
@@ -366,7 +378,7 @@ export default function Register() {
       // Backend deleteRegistration removes the doc and pulls from session.reg[] if needed
       await deleteRegistrationFromSheets(recordId)
       showToast('Registration cancelled')
-      await refreshAll(true)
+      await refreshMemberData(parentEmail, true)
     } catch (err) {
       console.error('Error cancelling registration:', err)
       alert('Error cancelling registration: ' + (err.message || 'Unknown error'))

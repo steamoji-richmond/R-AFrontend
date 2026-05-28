@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
-import CONFIG from '../../config.js'
 import { setAdminKey } from '../../utils/authKeys.js'
+import { verifyAdminPassword } from '../../api/sheets.js'
 import {
   getBranches,
   getImportConflicts,
@@ -78,7 +78,7 @@ export default function Admin() {
     if (adminUnlocked) return
     ;(async () => {
       const code = await passwordDialog('Enter admin password')
-      if (code === CONFIG.ADMIN_PASS) {
+      if (code != null && (await verifyAdminPassword(code))) {
         setAdminKey(code)
         setAdminUnlocked(true)
       } else if (code != null) {

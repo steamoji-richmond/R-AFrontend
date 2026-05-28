@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import jsQR from 'jsqr'
-import CONFIG from '../config.js'
+import { WORKSTATIONS } from '../constants/workstations.js'
 import { useApp } from '../context/AppContext.jsx'
 import { setAttendKey } from '../utils/authKeys.js'
 import {
@@ -12,10 +12,9 @@ import {
   saveSessionToSheets,
   updateAllRegistrationsForUser,
   updateValidationMember,
+  verifyAttendPassword,
 } from '../api/sheets.js'
 import { title } from '../utils/helpers.js'
-
-const { WORKSTATIONS } = CONFIG
 
 // ---------------------------------------------------------------------------
 // Member picker modal — shown when badge not found, lets admin pick from
@@ -179,7 +178,7 @@ export default function Scanner() {
     if (attendUnlocked) return
     ;(async () => {
       const code = await passwordDialog('Enter attendance password')
-      if (code === CONFIG.ATTEND_PASS) {
+      if (code != null && (await verifyAttendPassword(code))) {
         setAttendKey(code)
         setAttendUnlocked(true)
       } else if (code != null) {

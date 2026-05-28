@@ -1,8 +1,8 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext.jsx'
-import CONFIG from '../config.js'
 import { setAttendKey } from '../utils/authKeys.js'
+import { verifyAttendPassword } from '../api/sheets.js'
 import {
   getBranches,
   getSessionsFromSheets,
@@ -61,7 +61,7 @@ export default function Attendance() {
     if (attendUnlocked) return
     ;(async () => {
       const code = await passwordDialog('Enter attendance password')
-      if (code === CONFIG.ATTEND_PASS) {
+      if (code != null && (await verifyAttendPassword(code))) {
         setAttendKey(code)
         setAttendUnlocked(true)
       } else if (code != null) {

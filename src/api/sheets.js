@@ -1,7 +1,5 @@
-import CONFIG, { getApiUrl } from '../config.js'
+import { getApiUrl } from '../config.js'
 import { getAdminKey, getAttendKey } from '../utils/authKeys.js'
-
-const { GOOGLE_SHEETS } = CONFIG
 
 // Simple in-memory registrations cache with TTL
 const registrationsCache = {
@@ -85,6 +83,24 @@ async function postJson(action, payload, params, auth) {
     return JSON.parse(text)
   } catch (e) {
     return { success: true, message: text }
+  }
+}
+
+export async function verifyAdminPassword(password) {
+  try {
+    const data = await postJson('verifyAdmin', { password })
+    return !!(data && data.success)
+  } catch {
+    return false
+  }
+}
+
+export async function verifyAttendPassword(password) {
+  try {
+    const data = await postJson('verifyAttend', { password })
+    return !!(data && data.success)
+  } catch {
+    return false
   }
 }
 
