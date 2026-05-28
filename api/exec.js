@@ -19,6 +19,14 @@ function readRawBody(req) {
 }
 
 export default async function handler(req, res) {
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept')
+    res.status(204).end()
+    return
+  }
+
   const qIndex = req.url.indexOf('?')
   const qs = qIndex >= 0 ? req.url.slice(qIndex) : ''
   const target = `${BACKEND_URL}/exec${qs}`
@@ -45,6 +53,9 @@ export default async function handler(req, res) {
 
     const text = await upstream.text()
     res.status(upstream.status)
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept')
     const contentType = upstream.headers.get('content-type')
     if (contentType) res.setHeader('Content-Type', contentType)
     res.send(text)

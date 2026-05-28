@@ -1,4 +1,4 @@
-import CONFIG from '../config.js'
+import CONFIG, { getApiUrl } from '../config.js'
 
 const { GOOGLE_SHEETS } = CONFIG
 
@@ -15,11 +15,11 @@ export function clearRegistrationsCache() {
 }
 
 function apiConfigured() {
-  return !!(GOOGLE_SHEETS && GOOGLE_SHEETS.API_URL)
+  return !!getApiUrl()
 }
 
 function buildUrl(action, extraParams) {
-  let url = GOOGLE_SHEETS.API_URL
+  let url = getApiUrl()
   const separator = url.indexOf('?') === -1 ? '?' : '&'
   url += `${separator}action=${encodeURIComponent(action)}`
   if (extraParams) {
@@ -37,7 +37,6 @@ async function getJson(action, params) {
   const url = buildUrl(action, params)
   const res = await fetch(url, {
     method: 'GET',
-    mode: 'cors',
     headers: { Accept: 'application/json' },
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
