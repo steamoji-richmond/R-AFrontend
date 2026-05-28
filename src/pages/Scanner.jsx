@@ -3,10 +3,12 @@ import { useNavigate, useParams } from 'react-router-dom'
 import jsQR from 'jsqr'
 import CONFIG from '../config.js'
 import { useApp } from '../context/AppContext.jsx'
+import { setAttendKey } from '../utils/authKeys.js'
 import {
   getRegistrationsFromSheets,
+  getSessionScanData,
   getSessionsFromSheets,
-  getValidationData,
+  lookupBadgeById,
   saveSessionToSheets,
   updateAllRegistrationsForUser,
   updateValidationMember,
@@ -152,7 +154,7 @@ function BadgeRegistrationModal({ badge, onSubmit, onCancel }) {
 export default function Scanner() {
   const { sid } = useParams()
   const navigate = useNavigate()
-  const { showToast, showSeat } = useApp()
+  const { showToast, showSeat, passwordDialog, attendUnlocked, setAttendUnlocked } = useApp()
 
   const [session, setSession] = useState(null)
   const [hint, setHint] = useState('') // prominent distance hint
@@ -173,6 +175,22 @@ export default function Scanner() {
   const ongoingRef = useRef({})
   const detectorRef = useRef(null)
 
+  useEffect(() => {
+    if (attendUnlocked) return
+    ;(async () => {
+      const code = await passwordDialog('Enter attendance password')
+      if (code === CONFIG.ATTEND_PASS) {
+        setAttendKey(code)
+        setAttendUnlocked(true)
+      } else if (code != null) {
+        alert('Incorrect password')
+        navigate('/attendance')
+      } else {
+        navigate('/attendance')
+      }
+    })()
+  }, [attendUnlocked, passwordDialog, setAttendUnlocked, navigate])
+
   // ------------------------------------------------------------------
   // Load session + registrations
   // ------------------------------------------------------------------
@@ -184,21 +202,19 @@ export default function Scanner() {
   }, [sid, navigate])
 
   const loadRegs = useCallback(async () => {
+    if (!attendUnlocked) return
     setLoadingRegs(true)
     try {
-      const [regs, members] = await Promise.all([
-        getRegistrationsFromSheets(true),
-        getValidationData(),
-      ])
-      setSessionRegs((regs || []).filter((r) => (r.sessionId || r['Session ID'] || '') === sid))
-      setSessionMembers(members || [])
+      const data = await getSessionScanData(sid)
+      setSessionRegs(data.registrations || [])
+      setSessionMembers(data.members || [])
     } finally {
       setLoadingRegs(false)
     }
-  }, [sid])
+  }, [sid, attendUnlocked])
 
-  useEffect(() => { loadSession() }, [loadSession])
-  useEffect(() => { loadRegs() }, [loadRegs])
+  useEffect(() => { if (attendUnlocked) loadSession() }, [loadSession, attendUnlocked])
+  useEffect(() => { if (attendUnlocked) loadRegs() }, [loadRegs, attendUnlocked])
 
   // ------------------------------------------------------------------
   // Camera
@@ -353,7 +369,7 @@ export default function Scanner() {
     if (existingAtt) {
       if (existingAtt.sessionIn && !existingAtt.sessionOut) {
         existingAtt.sessionOut = new Date().toISOString()
-        await saveSessionToSheets(s)
+        await saveSessionToSheets(s, 'attend')
         showToast(`${badge} checked out`)
         clear(); return
       }
@@ -366,33 +382,33 @@ export default function Scanner() {
       clear(); return
     }
 
-    const [validationMembers, registrations] = await Promise.all([
-      getValidationData(),
-      getRegistrationsFromSheets(),
+    const [member, registrations] = await Promise.all([
+      lookupBadgeById(badge),
+      getRegistrationsFromSheets({ sessionId: sid, auth: 'attend', forceRefresh: true }),
     ])
-    let member = (validationMembers || []).find((m) => (m.badgeId || m['Badge ID'] || '') === badge)
     let regs = registrations || []
 
     if (!member) {
-      // Show picker first — let admin match to an existing registrant
       const allSessionRegs = regs.filter((r) => (r.sessionId || r['Session ID'] || '') === sid)
-      const picked = await showMemberPicker(badge, allSessionRegs, validationMembers || [])
+      const picked = await showMemberPicker(badge, allSessionRegs, sessionMembers || [])
 
       if (picked) {
         // picked is a registration record — link badge to it
         const fn = (picked.firstName || picked['First Name'] || '').trim()
         const ln = (picked.lastName || picked['Last Name'] || '').trim()
         const em = (picked.parentEmail || picked['Parent Email'] || '').toLowerCase().trim()
-        member = (validationMembers || []).find((m) => {
+        member = (sessionMembers || []).find((m) => {
           return (m.firstName || '').toLowerCase() === fn.toLowerCase()
             && (m.lastName || '').toLowerCase() === ln.toLowerCase()
             && (m.parentEmail || '').toLowerCase() === em.toLowerCase()
         }) || { badgeId: badge, firstName: fn, lastName: ln, parentEmail: em }
         member.badgeId = badge
         try {
-          await updateValidationMember(member)
+          await updateValidationMember(member, 'attend')
           const res = await updateAllRegistrationsForUser({ firstName: fn, lastName: ln, parentEmail: em, badgeId: badge })
-          if (res.success && res.updatedCount > 0) regs = await getRegistrationsFromSheets(true)
+          if (res.success && res.updatedCount > 0) {
+            regs = await getRegistrationsFromSheets({ sessionId: sid, auth: 'attend', forceRefresh: true })
+          }
         } catch {}
       } else {
         showToast('Check-in cancelled'); clear(); return
@@ -402,14 +418,16 @@ export default function Scanner() {
       if (!memberBadgeId || memberBadgeId !== badge) {
         member.badgeId = badge
         try {
-          await updateValidationMember(member)
+          await updateValidationMember(member, 'attend')
           const res = await updateAllRegistrationsForUser({
             firstName: member.firstName || member['First Name'] || '',
             lastName: member.lastName || member['Last Name'] || '',
             parentEmail: member.parentEmail || member['Parent Email'] || '',
             badgeId: badge,
           })
-          if (res.success && res.updatedCount > 0) regs = await getRegistrationsFromSheets(true)
+          if (res.success && res.updatedCount > 0) {
+            regs = await getRegistrationsFromSheets({ sessionId: sid, auth: 'attend', forceRefresh: true })
+          }
         } catch {}
       }
     }
@@ -460,7 +478,7 @@ export default function Scanner() {
       seat, sessionIn: new Date().toISOString(), ts: Date.now(),
     }
     s.att.push(checkInData)
-    try { await saveSessionToSheets(s) } catch {}
+    try { await saveSessionToSheets(s, 'attend') } catch {}
 
     const memberName =
       member
@@ -488,15 +506,15 @@ export default function Scanner() {
     if (existingAtt) { showToast(`${fn} ${ln} already checked in — Seat ${existingAtt.seat}`); showSeat(existingAtt.seat); return }
 
     const member = { badgeId: badge, firstName: fn, lastName: ln, parentEmail: em }
-    const regs = await getRegistrationsFromSheets()
+    const regs = await getRegistrationsFromSheets({ sessionId: sid, auth: 'attend' })
     await doCheckIn(s, badge, member, regs, null)
     loadRegs()
   }
 
   const printList = async () => {
     if (!session) return
-    const registrations = await getRegistrationsFromSheets()
-    const sessionRegsAll = (registrations || []).filter((r) => (r.sessionId || r['Session ID'] || '') === sid)
+    const registrations = await getRegistrationsFromSheets({ sessionId: sid, auth: 'attend' })
+    const sessionRegsAll = registrations || []
     let rows = sessionRegsAll.map((reg, i) => ({
       i: i + 1,
       badge: reg.badgeId || reg['Badge ID'] || '',
@@ -536,6 +554,16 @@ export default function Scanner() {
       : hint === 'ok'
       ? { background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' }
       : {}),
+  }
+
+  if (!attendUnlocked) {
+    return (
+      <section id="scanPage">
+        <div className="panel">
+          <p className="caption muted">Attendance access required.</p>
+        </div>
+      </section>
+    )
   }
 
   return (

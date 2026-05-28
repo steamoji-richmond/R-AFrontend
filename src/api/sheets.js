@@ -1,10 +1,12 @@
 import CONFIG, { getApiUrl } from '../config.js'
+import { getAdminKey, getAttendKey } from '../utils/authKeys.js'
 
 const { GOOGLE_SHEETS } = CONFIG
 
 // Simple in-memory registrations cache with TTL
 const registrationsCache = {
   data: [],
+  key: '',
   timestamp: 0,
   ttl: 30000,
 }
@@ -12,6 +14,7 @@ const registrationsCache = {
 export function clearRegistrationsCache() {
   registrationsCache.timestamp = 0
   registrationsCache.data = []
+  registrationsCache.key = ''
 }
 
 function apiConfigured() {
@@ -32,24 +35,38 @@ function buildUrl(action, extraParams) {
   return url
 }
 
-async function getJson(action, params) {
+function authHeaders(auth) {
+  const headers = {}
+  if (auth === 'admin') {
+    const key = getAdminKey()
+    if (key) headers['X-Admin-Key'] = key
+  } else if (auth === 'attend') {
+    const key = getAttendKey()
+    if (key) headers['X-Attend-Key'] = key
+  }
+  return headers
+}
+
+async function getJson(action, params, auth) {
   if (!apiConfigured()) return null
   const url = buildUrl(action, params)
   const res = await fetch(url, {
     method: 'GET',
-    headers: { Accept: 'application/json' },
+    headers: { Accept: 'application/json', ...authHeaders(auth) },
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }
 
-async function postJson(action, payload, params) {
+async function postJson(action, payload, params, auth) {
   if (!apiConfigured()) return { success: true }
   const url = buildUrl(action, params)
   const res = await fetch(url, {
     method: 'POST',
-    // text/plain to avoid CORS preflight; Apps Script parses JSON body
-    headers: { 'Content-Type': 'text/plain' },
+    headers: {
+      'Content-Type': 'text/plain',
+      ...authHeaders(auth),
+    },
     body: JSON.stringify(payload || {}),
   })
   if (res.status === 405) {
@@ -83,7 +100,7 @@ export async function lookupMembersByEmail(email) {
 
 export async function getValidationData() {
   try {
-    const data = await getJson('getValidation')
+    const data = await getJson('getValidation', null, 'admin')
     return (data && data.success && data.members) || []
   } catch (err) {
     console.error('getValidationData error', err)
@@ -91,21 +108,47 @@ export async function getValidationData() {
   }
 }
 
-export async function updateValidationMember(memberData) {
-  const data = await postJson('updateValidation', memberData)
+export async function lookupBadgeById(badge) {
+  try {
+    const data = await getJson('lookupBadge', { badge }, 'attend')
+    return (data && data.success && data.member) || null
+  } catch (err) {
+    console.error('lookupBadgeById error', err)
+    return null
+  }
+}
+
+export async function getSessionScanData(sessionId) {
+  try {
+    const data = await getJson('getSessionScanData', { sessionId }, 'attend')
+    if (data && data.success) {
+      return {
+        registrations: data.registrations || [],
+        members: data.members || [],
+      }
+    }
+    return { registrations: [], members: [] }
+  } catch (err) {
+    console.error('getSessionScanData error', err)
+    return { registrations: [], members: [] }
+  }
+}
+
+export async function updateValidationMember(memberData, auth) {
+  const data = await postJson('updateValidation', memberData, null, auth)
   if (!data.success) throw new Error(data.error || 'Failed to update member')
   return data
 }
 
 export async function deleteValidationMember(rowIndex) {
-  const data = await postJson('deleteValidation', { rowIndex }, { rowIndex })
+  const data = await postJson('deleteValidation', { rowIndex }, { rowIndex }, 'admin')
   if (!data.success) throw new Error(data.error || 'Failed to delete member')
   return data
 }
 
 export async function getPendingMembers() {
   try {
-    const data = await getJson('getPendingMembers')
+    const data = await getJson('getPendingMembers', null, 'admin')
     return (data && data.success && data.members) || []
   } catch (err) {
     console.error('getPendingMembers error', err)
@@ -114,37 +157,56 @@ export async function getPendingMembers() {
 }
 
 export async function approveMember(memberId, approvedBy = '') {
-  const data = await postJson('approveMember', { memberId, approvedBy })
+  const data = await postJson('approveMember', { memberId, approvedBy }, null, 'admin')
   if (!data.success) throw new Error(data.error || 'Failed to approve member')
   return data
 }
 
 export async function rejectMember(memberId, reason = '', approvedBy = '') {
-  const data = await postJson('rejectMember', { memberId, reason, approvedBy })
+  const data = await postJson('rejectMember', { memberId, reason, approvedBy }, null, 'admin')
   if (!data.success) throw new Error(data.error || 'Failed to reject member')
   return data
 }
 
-export async function getRegistrationsFromSheets(forceRefresh = false) {
+export async function getRegistrationsFromSheets(arg = false) {
+  const opts =
+    typeof arg === 'object' && arg !== null
+      ? arg
+      : { forceRefresh: !!arg }
+  const {
+    forceRefresh = false,
+    email,
+    sessionId,
+    auth = email ? undefined : 'admin',
+  } = opts
+
+  const cacheKey = `${email || ''}|${sessionId || ''}|${auth || ''}`
   const now = Date.now()
   if (
     !forceRefresh &&
-    registrationsCache.data.length > 0 &&
+    registrationsCache.key === cacheKey &&
+    registrationsCache.data.length >= 0 &&
     now - registrationsCache.timestamp < registrationsCache.ttl
   ) {
     return registrationsCache.data
   }
   try {
-    const data = await getJson('getRegistrations')
+    const params = {}
+    if (email) params.email = email
+    if (sessionId) params.sessionId = sessionId
+    const data = await getJson('getRegistrations', params, auth)
     if (data && data.success && data.registrations) {
       registrationsCache.data = data.registrations
+      registrationsCache.key = cacheKey
       registrationsCache.timestamp = Date.now()
       return data.registrations
     }
     return []
   } catch (err) {
     console.error('getRegistrationsFromSheets error', err)
-    return registrationsCache.data.length ? registrationsCache.data : []
+    return registrationsCache.key === cacheKey && registrationsCache.data.length
+      ? registrationsCache.data
+      : []
   }
 }
 
@@ -160,8 +222,8 @@ export async function getSessionsFromSheets() {
   }
 }
 
-export async function saveSessionToSheets(sessionData) {
-  const data = await postJson('saveSession', sessionData)
+export async function saveSessionToSheets(sessionData, auth = 'admin') {
+  const data = await postJson('saveSession', sessionData, null, auth)
   if (!data.success) throw new Error(data.error || 'Failed to save session')
   return data
 }
@@ -178,7 +240,7 @@ export async function deleteRegistrationFromSheets(registrationId) {
 }
 
 export async function deleteSessionFromSheets(sessionId, reason = '') {
-  const data = await postJson('deleteSession', { sessionId, reason }, { sessionId })
+  const data = await postJson('deleteSession', { sessionId, reason }, { sessionId }, 'admin')
   if (!data.success) throw new Error(data.error || 'Failed to delete session')
   return data
 }
@@ -202,7 +264,7 @@ export async function updateRegistrationBadgeId(registrationId, badgeId) {
 
 export async function getSteamojiTokenStatus() {
   try {
-    const data = await getJson('steamojiTokenStatus')
+    const data = await getJson('steamojiTokenStatus', null, 'admin')
     return data || { tokenConfigured: false }
   } catch {
     return { tokenConfigured: false }
@@ -220,14 +282,14 @@ export async function importSteamojiMembers({
     organizationID,
     branchIds,
     onlyUpgraded,
-  })
+  }, null, 'admin')
   if (!data.success) throw new Error(data.error || 'Import failed')
   return data
 }
 
 export async function getImportConflicts() {
   try {
-    const data = await getJson('getImportConflicts')
+    const data = await getJson('getImportConflicts', null, 'admin')
     return (data && data.success && data.conflicts) || []
   } catch (err) {
     console.error('getImportConflicts error', err)
@@ -236,19 +298,19 @@ export async function getImportConflicts() {
 }
 
 export async function resolveImportConflict(id, memberData) {
-  const data = await postJson('resolveImportConflict', { id, ...memberData })
+  const data = await postJson('resolveImportConflict', { id, ...memberData }, null, 'admin')
   if (!data.success) throw new Error(data.error || 'Failed to resolve conflict')
   return data
 }
 
 export async function dismissImportConflict(id) {
-  const data = await postJson('dismissImportConflict', { id })
+  const data = await postJson('dismissImportConflict', { id }, null, 'admin')
   if (!data.success) throw new Error(data.error || 'Failed to dismiss conflict')
   return data
 }
 
-export async function updateAllRegistrationsForUser(userData) {
-  const data = await postJson('updateAllRegistrationsForUser', userData)
+export async function updateAllRegistrationsForUser(userData, auth = 'attend') {
+  const data = await postJson('updateAllRegistrationsForUser', userData, null, auth)
   if (!data.success) throw new Error(data.error || 'Failed to update registrations')
   clearRegistrationsCache()
   return data
@@ -283,10 +345,10 @@ export async function confirmPayment(registrationId) {
  * branches — useful on the public sign-up form so closed locations don't
  * show up as choices.
  */
-export async function getBranches({ activeOnly = false } = {}) {
+export async function getBranches({ activeOnly = false, admin = false } = {}) {
   try {
     const params = activeOnly ? { activeOnly: '1' } : {}
-    const data = await getJson('getBranches', params)
+    const data = await getJson('getBranches', params, admin ? 'admin' : undefined)
     return (data && data.success && data.branches) || []
   } catch (err) {
     console.error('getBranches error', err)
@@ -295,19 +357,19 @@ export async function getBranches({ activeOnly = false } = {}) {
 }
 
 export async function saveBranch(branchData) {
-  const data = await postJson('saveBranch', branchData)
+  const data = await postJson('saveBranch', branchData, null, 'admin')
   if (!data.success) throw new Error(data.error || 'Failed to save branch')
   return data
 }
 
 export async function deleteBranch(id, { force = false } = {}) {
-  const data = await postJson('deleteBranch', { id, force }, { id })
+  const data = await postJson('deleteBranch', { id, force }, { id }, 'admin')
   if (!data.success) throw new Error(data.error || 'Failed to delete branch')
   return data
 }
 
 export async function setBranchActive(id, active) {
-  const data = await postJson('setBranchActive', { id, active }, { id })
+  const data = await postJson('setBranchActive', { id, active }, { id }, 'admin')
   if (!data.success) throw new Error(data.error || 'Failed to update branch')
   return data
 }
@@ -322,7 +384,7 @@ export async function updateBranchLinks(id, linkedBranchIds, action = 'add') {
     id,
     linkedBranchIds,
     action,
-  })
+  }, null, 'admin')
   if (!data.success) throw new Error(data.error || 'Failed to update branch links')
   return data
 }

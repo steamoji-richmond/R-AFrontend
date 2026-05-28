@@ -19,7 +19,7 @@ export default function Approvals({ onChange }) {
     try {
       const [list, branchList] = await Promise.all([
         getPendingMembers(),
-        getBranches(),
+        getBranches({ admin: true }),
       ])
       setMembers(Array.isArray(list) ? list : [])
       setBranches(Array.isArray(branchList) ? branchList : [])

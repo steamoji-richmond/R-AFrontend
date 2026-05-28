@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
 import CONFIG from '../../config.js'
+import { setAdminKey } from '../../utils/authKeys.js'
 import {
   getBranches,
   getImportConflicts,
@@ -48,7 +49,7 @@ export default function Admin() {
 
   const loadBranches = useCallback(async () => {
     try {
-      const list = await getBranches()
+      const list = await getBranches({ admin: true })
       setBranches(Array.isArray(list) ? list : [])
     } catch {
       // non-critical — branches page has its own loader
@@ -78,6 +79,7 @@ export default function Admin() {
     ;(async () => {
       const code = await passwordDialog('Enter admin password')
       if (code === CONFIG.ADMIN_PASS) {
+        setAdminKey(code)
         setAdminUnlocked(true)
       } else if (code != null) {
         alert('Incorrect password')

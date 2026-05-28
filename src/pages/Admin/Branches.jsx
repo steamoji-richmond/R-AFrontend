@@ -28,7 +28,7 @@ export default function Branches({ onChange }) {
   const refresh = useCallback(async () => {
     setLoading(true)
     try {
-      const list = await getBranches()
+      const list = await getBranches({ admin: true })
       setBranches(Array.isArray(list) ? list : [])
     } finally {
       setLoading(false)

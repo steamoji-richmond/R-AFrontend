@@ -1,8 +1,10 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useApp } from '../context/AppContext.jsx'
+import CONFIG from '../config.js'
+import { setAttendKey } from '../utils/authKeys.js'
 import {
   getBranches,
-  getRegistrationsFromSheets,
   getSessionsFromSheets,
 } from '../api/sheets.js'
 import { listUpcoming, title, todayFloor } from '../utils/helpers.js'
@@ -47,31 +49,45 @@ const SessionItem = memo(function SessionItem({ session, regCount, attCount, bra
 
 export default function Attendance() {
   const navigate = useNavigate()
+  const { passwordDialog, attendUnlocked, setAttendUnlocked } = useApp()
   const [sessions, setSessions] = useState([])
   const [branches, setBranches] = useState([])
-  const [registrations, setRegistrations] = useState([])
   const [selectedBranch, setSelectedBranch] = useState('')
   const [selectedSid, setSelectedSid] = useState('')
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
 
+  useEffect(() => {
+    if (attendUnlocked) return
+    ;(async () => {
+      const code = await passwordDialog('Enter attendance password')
+      if (code === CONFIG.ATTEND_PASS) {
+        setAttendKey(code)
+        setAttendUnlocked(true)
+      } else if (code != null) {
+        alert('Incorrect password')
+      }
+    })()
+  }, [attendUnlocked, passwordDialog, setAttendUnlocked])
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [s, r, b] = await Promise.all([
+      const [s, b] = await Promise.all([
         getSessionsFromSheets(),
-        getRegistrationsFromSheets(true),
         getBranches(),
       ])
       setSessions(s || [])
-      setRegistrations(r || [])
       setBranches(Array.isArray(b) ? b : [])
     } finally {
       setLoading(false)
     }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    if (!attendUnlocked) return
+    load()
+  }, [attendUnlocked, load])
 
   const branchMap = useMemo(() => {
     const m = {}
@@ -81,7 +97,6 @@ export default function Attendance() {
 
   const up = useMemo(() => listUpcoming(sessions), [sessions])
 
-  // Sessions filtered by selected branch (used in the session dropdown)
   const branchFiltered = useMemo(() => {
     if (!selectedBranch) return up
     return up.filter((s) => {
@@ -90,7 +105,6 @@ export default function Attendance() {
     })
   }, [up, selectedBranch])
 
-  // Only TODAY's sessions for the list below
   const todayStart = useMemo(() => todayFloor(), [])
   const todayEnd = useMemo(() => new Date(todayStart.getTime() + 24 * 60 * 60 * 1000), [todayStart])
 
@@ -103,15 +117,6 @@ export default function Attendance() {
 
   useEffect(() => { setSelectedSid('') }, [selectedBranch])
   useEffect(() => { setPage(1) }, [selectedBranch])
-
-  const regCounts = useMemo(() => {
-    const counts = {}
-    ;(registrations || []).forEach((reg) => {
-      const sid = reg.sessionId || reg['Session ID'] || reg['sessionId'] || ''
-      if (sid) counts[sid] = (counts[sid] || 0) + 1
-    })
-    return counts
-  }, [registrations])
 
   const totalPages = Math.max(1, Math.ceil(todayOnly.length / PAGE_SIZE))
   const p = Math.min(page, totalPages)
@@ -132,12 +137,21 @@ export default function Attendance() {
 
   const selectedBranchName = selectedBranch ? (branchMap[selectedBranch] || '') : ''
 
+  if (!attendUnlocked) {
+    return (
+      <section id="attendance">
+        <div className="panel">
+          <p className="caption muted">Attendance access required.</p>
+        </div>
+      </section>
+    )
+  }
+
   return (
     <section id="attendance">
       <div className="panel">
         <h2>Select a session</h2>
 
-        {/* Branch filter */}
         {branches.length > 0 && (
           <div style={{ marginBottom: 12 }}>
             <select
@@ -153,7 +167,6 @@ export default function Attendance() {
           </div>
         )}
 
-        {/* Session dropdown + go button */}
         <div className="row wrap">
           <select
             value={selectedSid}
@@ -170,7 +183,6 @@ export default function Attendance() {
           </button>
         </div>
 
-        {/* Today only */}
         <h3 style={{ marginTop: 20 }}>
           Today
           {selectedBranchName && (
@@ -195,7 +207,7 @@ export default function Attendance() {
                 <SessionItem
                   key={s.id}
                   session={s}
-                  regCount={regCounts[s.id] || (s.reg || []).length}
+                  regCount={(s.reg || []).length}
                   attCount={(s.att || []).length}
                   branchNames={branchNames}
                   onScan={goTo}

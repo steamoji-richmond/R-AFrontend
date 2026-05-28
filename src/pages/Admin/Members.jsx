@@ -469,7 +469,7 @@ export default function Members({ branches = [] }) {
   )
 
   const onSave = async (payload) => {
-    await updateValidationMember(payload)
+    await updateValidationMember(payload, 'admin')
     showToast(payload._rowIndex ? 'Member updated' : 'Member added')
     setEditing(null)
     load()

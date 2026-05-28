@@ -198,7 +198,7 @@ export default function ImportConflictsTab({ branches: propBranches, onResolved 
     try {
       const [list, branchList] = await Promise.all([
         getImportConflicts(),
-        propBranches?.length ? Promise.resolve(propBranches) : getBranches(),
+        propBranches?.length ? Promise.resolve(propBranches) : getBranches({ admin: true }),
       ])
       setConflicts(Array.isArray(list) ? list : [])
       setBranches(Array.isArray(branchList) ? branchList : [])

@@ -10,7 +10,7 @@ import {
   saveRegistrationToSheets,
 } from '../api/sheets.js'
 import {
-  capLeftFromSheets,
+  capLeft,
   clearCapacityCache,
   computeMemberPrice,
   findRegistrationRowForSession,
@@ -50,14 +50,17 @@ export default function Register() {
   const [paymentConfirm, setPaymentConfirm] = useState(null) // { session, price }
 
   const refreshAll = useCallback(async (force = true) => {
+    const parentEmail = email.trim().toLowerCase()
     const [s, r] = await Promise.all([
       getSessionsFromSheets(),
-      getRegistrationsFromSheets(force),
+      parentEmail
+        ? getRegistrationsFromSheets({ forceRefresh: force, email: parentEmail })
+        : Promise.resolve([]),
     ])
     setSessions(s || [])
     setRegistrations(r || [])
     clearCapacityCache()
-  }, [])
+  }, [email])
 
   useEffect(() => {
     refreshAll(false)
@@ -174,7 +177,7 @@ export default function Register() {
     const parentEmail = email.trim().toLowerCase()
     const items = []
     for (const s of upcoming) {
-      const seatsLeft = capLeftFromSheets(s, registrations)
+      const seatsLeft = capLeft(s)
       const regThisMonth = kidRegisteredForMonthFromSheets(
         selectedMember,
         parentEmail,
@@ -249,13 +252,19 @@ export default function Register() {
     }
     setSubmittingSessionId(session.id)
     try {
-      const latestRegs = await getRegistrationsFromSheets(true)
-      const seatsLeft = capLeftFromSheets(session, latestRegs)
+      const latestSessions = await getSessionsFromSheets()
+      const freshSession =
+        latestSessions.find((x) => x.id === session.id) || session
+      const seatsLeft = capLeft(freshSession)
       if (seatsLeft <= 0) {
         alert('This session is full. Please select another session.')
         await refreshAll(true)
         return
       }
+      const latestRegs = await getRegistrationsFromSheets({
+        forceRefresh: true,
+        email: parentEmail,
+      })
       const already = kidRegisteredForMonthFromSheets(
         selectedMember,
         parentEmail,
@@ -337,7 +346,10 @@ export default function Register() {
     const parentEmail = email.trim().toLowerCase()
     setCancellingId(s.id)
     try {
-      const regsLatest = await getRegistrationsFromSheets(true)
+      const regsLatest = await getRegistrationsFromSheets({
+        forceRefresh: true,
+        email: parentEmail,
+      })
       const reg = findRegistrationRowForSession(
         s,
         selectedMember,

@@ -235,7 +235,7 @@ export default function Reports() {
       const [s, r, b] = await Promise.all([
         getSessionsFromSheets(),
         getRegistrationsFromSheets(true),
-        getBranches({ activeOnly: false }).catch(() => []),
+        getBranches({ activeOnly: false, admin: true }).catch(() => []),
       ])
       setSessions(s || [])
       setRegs(r || [])

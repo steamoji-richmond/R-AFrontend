@@ -8,6 +8,7 @@ export function AppProvider({ children }) {
   const [seat, setSeat] = useState(null)
   const [password, setPassword] = useState(null) // { prompt, resolve }
   const [adminUnlocked, setAdminUnlocked] = useState(false)
+  const [attendUnlocked, setAttendUnlocked] = useState(false)
   const toastTimer = useRef(null)
 
   const showToast = useCallback((msg) => {
@@ -55,6 +56,8 @@ export function AppProvider({ children }) {
     resolvePassword,
     adminUnlocked,
     setAdminUnlocked,
+    attendUnlocked,
+    setAttendUnlocked,
   }
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
