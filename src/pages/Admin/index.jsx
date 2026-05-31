@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
-import { setAdminKey } from '../../utils/authKeys.js'
+import { setAdminKey, getAdminKey } from '../../utils/authKeys.js'
 import { verifyAdminPassword } from '../../api/sheets.js'
 import {
   getBranches,
@@ -86,6 +86,13 @@ export default function Admin() {
       }
     })()
   }, [adminUnlocked, passwordDialog, setAdminUnlocked])
+
+  // Re-use stored key for this browser session after refresh
+  useEffect(() => {
+    if (!adminUnlocked && getAdminKey()) {
+      setAdminUnlocked(true)
+    }
+  }, [adminUnlocked, setAdminUnlocked])
 
   useEffect(() => {
     if (!adminUnlocked) return

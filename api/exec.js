@@ -22,7 +22,10 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept')
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Accept, X-Admin-Key, X-Attend-Key'
+    )
     res.status(204).end()
     return
   }
@@ -38,6 +41,12 @@ export default async function handler(req, res) {
     }
     if (req.headers.accept) {
       headers.Accept = req.headers.accept
+    }
+    if (req.headers['x-admin-key']) {
+      headers['X-Admin-Key'] = req.headers['x-admin-key']
+    }
+    if (req.headers['x-attend-key']) {
+      headers['X-Attend-Key'] = req.headers['x-attend-key']
     }
 
     let body
@@ -55,7 +64,7 @@ export default async function handler(req, res) {
     res.status(upstream.status)
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, X-Admin-Key, X-Attend-Key')
     const contentType = upstream.headers.get('content-type')
     if (contentType) res.setHeader('Content-Type', contentType)
     res.send(text)

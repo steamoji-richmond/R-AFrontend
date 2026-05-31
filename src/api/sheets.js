@@ -19,17 +19,24 @@ function apiConfigured() {
   return !!getApiUrl()
 }
 
-function buildUrl(action, extraParams) {
+function buildUrl(action, extraParams, auth) {
   let url = getApiUrl()
   const separator = url.indexOf('?') === -1 ? '?' : '&'
   url += `${separator}action=${encodeURIComponent(action)}`
-  if (extraParams) {
-    Object.keys(extraParams).forEach((k) => {
-      const v = extraParams[k]
-      if (v == null) return
-      url += `&${encodeURIComponent(k)}=${encodeURIComponent(v)}`
-    })
+  const params = { ...(extraParams || {}) }
+  // Query fallback — Vercel proxy may not forward custom headers on all paths
+  if (auth === 'admin') {
+    const key = getAdminKey()
+    if (key) params.adminKey = key
+  } else if (auth === 'attend') {
+    const key = getAttendKey()
+    if (key) params.attendKey = key
   }
+  Object.keys(params).forEach((k) => {
+    const v = params[k]
+    if (v == null) return
+    url += `&${encodeURIComponent(k)}=${encodeURIComponent(v)}`
+  })
   return url
 }
 
@@ -47,7 +54,7 @@ function authHeaders(auth) {
 
 async function getJson(action, params, auth) {
   if (!apiConfigured()) return null
-  const url = buildUrl(action, params)
+  const url = buildUrl(action, params, auth)
   const res = await fetch(url, {
     method: 'GET',
     headers: { Accept: 'application/json', ...authHeaders(auth) },
@@ -58,14 +65,22 @@ async function getJson(action, params, auth) {
 
 async function postJson(action, payload, params, auth) {
   if (!apiConfigured()) return { success: true }
-  const url = buildUrl(action, params)
+  const url = buildUrl(action, params, auth)
+  const body = { ...(payload || {}) }
+  if (auth === 'admin') {
+    const key = getAdminKey()
+    if (key) body.adminKey = key
+  } else if (auth === 'attend') {
+    const key = getAttendKey()
+    if (key) body.attendKey = key
+  }
   const res = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'text/plain',
       ...authHeaders(auth),
     },
-    body: JSON.stringify(payload || {}),
+    body: JSON.stringify(body),
   })
   if (res.status === 405) {
     throw new Error(
