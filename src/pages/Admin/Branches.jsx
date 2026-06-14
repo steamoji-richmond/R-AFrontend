@@ -303,7 +303,7 @@ function BranchModal({ branch, onCancel, onSave }) {
                 name="steamojiAuthToken"
                 value={form.steamojiAuthToken}
                 onChange={onChange}
-                placeholder="identoji AgEMc3RlYW1vamkuY29t…"
+                placeholder="AgEMc3RlYW1vamkuY29t…"
                 style={{ fontFamily: 'monospace', fontSize: '0.82rem' }}
               />
               <span style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: 4, display: 'block' }}>
