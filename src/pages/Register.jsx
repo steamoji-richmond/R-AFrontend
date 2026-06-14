@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useApp } from '../context/AppContext.jsx'
 import {
   createPaymentCheckout,
+  confirmPayment,
   deleteRegistrationFromSheets,
   getBranches,
   getRegistrationsFromSheets,
@@ -690,19 +691,41 @@ export default function Register() {
                               </div>
                               <div className="row" style={{ gap: 6 }}>
                                 {awaitingPayment && reg?.id && (
-                                  <button
-                                    className="primary"
-                                    onClick={async () => {
-                                      try {
-                                        const checkout = await createPaymentCheckout(reg.id)
-                                        if (checkout.checkoutUrl) window.location.href = checkout.checkoutUrl
-                                      } catch (err) {
-                                        alert('Could not load payment link: ' + err.message)
-                                      }
-                                    }}
-                                  >
-                                    Pay now
-                                  </button>
+                                  <>
+                                    <button
+                                      className="primary"
+                                      onClick={async () => {
+                                        try {
+                                          const checkout = await createPaymentCheckout(reg.id)
+                                          if (checkout.checkoutUrl) window.location.href = checkout.checkoutUrl
+                                        } catch (err) {
+                                          alert('Could not load payment link: ' + err.message)
+                                        }
+                                      }}
+                                    >
+                                      Pay now
+                                    </button>
+                                    <button
+                                      onClick={async () => {
+                                        try {
+                                          showToast('Checking payment status…')
+                                          const result = await confirmPayment(reg.id)
+                                          if (result.paid) {
+                                            showToast('Payment confirmed!')
+                                            await refreshMemberData(searchedEmail.trim().toLowerCase(), true)
+                                          } else {
+                                            alert(
+                                              'Payment not found yet. If you already paid, wait a minute and try again, or contact support.'
+                                            )
+                                          }
+                                        } catch (err) {
+                                          alert('Could not verify payment: ' + (err.message || 'Unknown error'))
+                                        }
+                                      }}
+                                    >
+                                      Check status
+                                    </button>
+                                  </>
                                 )}
                                 <button
                                   className="red"

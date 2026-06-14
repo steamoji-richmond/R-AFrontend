@@ -15,27 +15,48 @@ export default function PaymentReturn() {
       return
     }
 
-    confirmPayment(regId)
-      .then((result) => {
-        if (result.paid) {
-          setStatus('paid')
-          setMessage('Your payment was received and your registration is confirmed!')
-        } else {
+    let cancelled = false
+
+    async function verifyWithRetries() {
+      const maxAttempts = 5
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          const result = await confirmPayment(regId)
+          if (cancelled) return
+
+          if (result.paid) {
+            setStatus('paid')
+            setMessage('Your payment was received and your registration is confirmed!')
+            return
+          }
+
+          if (attempt < maxAttempts) {
+            await new Promise((r) => setTimeout(r, 2000))
+            continue
+          }
+
           setStatus('pending')
           setMessage(
             'Payment not yet confirmed. If you completed payment, it may take a moment to process — please check back shortly. If you did not complete payment, your registration is still pending.'
           )
+        } catch (err) {
+          if (cancelled) return
+          console.error('confirmPayment error', err)
+          setStatus('error')
+          setMessage(
+            'There was an error verifying your payment: ' +
+              (err.message || 'Unknown error') +
+              '. Please contact support.'
+          )
+          return
         }
-      })
-      .catch((err) => {
-        console.error('confirmPayment error', err)
-        setStatus('error')
-        setMessage(
-          'There was an error verifying your payment: ' +
-            (err.message || 'Unknown error') +
-            '. Please contact support.'
-        )
-      })
+      }
+    }
+
+    verifyWithRetries()
+    return () => {
+      cancelled = true
+    }
   }, [regId])
 
   return (
