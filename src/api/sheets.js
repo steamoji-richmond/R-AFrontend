@@ -293,12 +293,13 @@ export async function updateRegistrationBadgeId(registrationId, badgeId) {
   return data
 }
 
-export async function getSteamojiTokenStatus() {
+export async function getSteamojiTokenStatus(branchId) {
   try {
-    const data = await getJson('steamojiTokenStatus', null, 'admin')
-    return data || { tokenConfigured: false }
+    const params = branchId ? { branchId } : null
+    const data = await getJson('steamojiTokenStatus', params, 'admin')
+    return data || { tokenConfigured: false, cookieConfigured: false }
   } catch {
-    return { tokenConfigured: false }
+    return { tokenConfigured: false, cookieConfigured: false }
   }
 }
 

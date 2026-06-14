@@ -127,7 +127,7 @@ const MemberRow = memo(function MemberRow({ member, branchMap, onEdit, onDelete 
 const LS_TOKEN_KEY = 'steamoji_auth_token'
 
 function SteamojiImportModal({ branches, branchMap, onClose, onDone }) {
-  const [serverTokenConfigured, setServerTokenConfigured] = useState(null) // null = checking
+  const [serverStatus, setServerStatus] = useState(null) // null = checking
   const [authToken, setAuthToken] = useState(() => localStorage.getItem(LS_TOKEN_KEY) || '')
   const [selectedBranch, setSelectedBranch] = useState(() => {
     const pre = branches.find((b) => b.organizationId)
@@ -140,41 +140,53 @@ function SteamojiImportModal({ branches, branchMap, onClose, onDone }) {
   const [error, setError] = useState('')
   const tokenRef = useRef(null)
 
-  // Check whether the server already has a token configured
   useEffect(() => {
-    getSteamojiTokenStatus().then((s) => setServerTokenConfigured(!!s.tokenConfigured))
-  }, [])
+    if (!selectedBranch && branches.length) {
+      const pre = branches.find((b) => b.organizationId)
+      if (pre) setSelectedBranch(pre.id)
+    }
+  }, [branches, selectedBranch])
 
   useEffect(() => {
-    if (serverTokenConfigured === false) tokenRef.current?.focus()
-  }, [serverTokenConfigured])
+    getSteamojiTokenStatus(selectedBranch || undefined).then((s) => setServerStatus(s))
+  }, [selectedBranch])
+
+  useEffect(() => {
+    if (serverStatus && !serverStatus.tokenConfigured) tokenRef.current?.focus()
+  }, [serverStatus])
 
   const activeBranch = branches.find((b) => b.id === selectedBranch) || null
   const derivedOrgId = activeBranch?.organizationId || ''
   const derivedToken = activeBranch?.steamojiAuthToken || ''
   const derivedCookie = activeBranch?.steamojiAuthCookie || ''
   const effectiveOrgId = derivedOrgId || orgIdOverride.trim()
-  // Both token and cookie must be present (either on the branch or server env)
-  const tokenCovered = !!(derivedToken || serverTokenConfigured)
-  const cookieCovered = !!derivedCookie
+  const tokenCovered = !!(derivedToken || serverStatus?.tokenConfigured || authToken.trim())
+  const cookieCovered = !!(derivedCookie || serverStatus?.cookieConfigured)
 
   const run = async () => {
-    const token = authToken.trim()
-    if (!tokenCovered && !token) {
+    if (!tokenCovered && !authToken.trim()) {
       setError('Paste your Steamoji authorization token.')
+      return
+    }
+    if (!selectedBranch && !effectiveOrgId) {
+      setError('Select a branch or enter an Organization ID.')
+      return
+    }
+    if (!effectiveOrgId) {
+      setError('Select a branch that has an Organization ID, or enter one manually.')
       return
     }
     if (!cookieCovered) {
       setError('Auth cookie (authoji) is missing. Go to Branches → Edit and set the Steamoji Auth Cookie field.')
       return
     }
-    if (!effectiveOrgId) { setError('Select a branch that has an Organization ID, or enter one manually.'); return }
     setError('')
     setRunning(true)
     setResult(null)
     try {
+      const token = authToken.trim()
       const res = await importSteamojiMembers({
-        authToken: token, // empty string → backend falls back to env token
+        authToken: token, // empty → backend uses branch / env token
         organizationID: effectiveOrgId,
         branchIds: selectedBranch ? [selectedBranch] : [],
         onlyUpgraded,
@@ -213,8 +225,8 @@ function SteamojiImportModal({ branches, branchMap, onClose, onDone }) {
 
         {!result ? (
           <>
-            {serverTokenConfigured === null ? (
-              <div style={{ ...field, color: '#888', fontSize: 13 }}>Checking token status…</div>
+            {serverStatus === null ? (
+              <div style={{ ...field, color: '#888', fontSize: 13 }}>Checking credentials…</div>
             ) : (tokenCovered && cookieCovered) ? (
               <div style={{ ...field, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8 }}>
                 <span style={{ fontSize: 18 }}>🔑</span>
