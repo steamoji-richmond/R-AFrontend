@@ -16,9 +16,9 @@ import ImportConflictsTab from './ImportConflictsTab.jsx'
 const PAGE_SIZE = 15
 
 const MEMBERSHIP_LABEL = {
-  yearly: 'Yearly',
-  'semi-yearly': 'Semi-yearly',
-  none: 'Non-member',
+  yearly: 'Annual',
+  'semi-yearly': 'Non-annual',
+  none: 'Non-Steamoji',
 }
 const MEMBERSHIP_COLOR = {
   yearly: '#1b8a3a',
@@ -600,9 +600,9 @@ export default function Members({ branches = [] }) {
         />
         <select value={membershipFilter} onChange={(e) => setMembershipFilter(e.target.value)}>
           <option value="all">All memberships ({counts.all})</option>
-          <option value="yearly">Yearly ({counts.yearly})</option>
-          <option value="semi-yearly">Semi-yearly ({counts['semi-yearly']})</option>
-          <option value="none">Non-member ({counts.none})</option>
+          <option value="yearly">Annual ({counts.yearly})</option>
+          <option value="semi-yearly">Non-annual ({counts['semi-yearly']})</option>
+          <option value="none">Non-Steamoji ({counts.none})</option>
         </select>
         {branches.length > 0 && (
           <select value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}>

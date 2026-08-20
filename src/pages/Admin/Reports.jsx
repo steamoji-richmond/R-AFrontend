@@ -332,7 +332,7 @@ export default function Reports() {
         <KpiCard label="Attendance"    value={totalAtt}     color="#16a34a" />
         <KpiCard label="Attendance Rate" value={`${attRate}%`} color={attRate >= 70 ? '#16a34a' : '#d97706'} />
         <KpiCard label="Paid"          value={totalPaid}    color="#0891b2" />
-        <KpiCard label="Free / Yearly" value={totalFree}    color="#64748b" />
+        <KpiCard label="Free / Annual" value={totalFree}    color="#64748b" />
       </div>
 
       {/* Growth chart */}
@@ -366,7 +366,7 @@ export default function Reports() {
       </ChartCard>
 
       {/* Payment breakdown */}
-      <ChartCard title="Payment Breakdown" subtitle="Paid in full · Semi-yearly (50% rate) · Free / yearly covered">
+      <ChartCard title="Payment Breakdown" subtitle="Paid in full · Non-annual (40% off) · Free / annual covered">
         <ResponsiveContainer width="100%" height={H}>
           <BarChart data={timeline} margin={{ top:4, right:8, left:-10, bottom:0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
@@ -375,7 +375,7 @@ export default function Reports() {
             <Tooltip content={<CustomTooltip />} cursor={{ fill:'#f8fafc' }} />
             <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize:'0.78rem', paddingTop:10 }} />
             <Bar dataKey="paid" name="Paid (full)"        stackId="s" fill="#0891b2" />
-            <Bar dataKey="semi" name="Semi-yearly (50%)"  stackId="s" fill="#d97706" />
+            <Bar dataKey="semi" name="Non-annual (40% off)"  stackId="s" fill="#d97706" />
             <Bar dataKey="free" name="Free / Covered"     stackId="s" fill="#cbd5e1" radius={[3,3,0,0]} />
           </BarChart>
         </ResponsiveContainer>

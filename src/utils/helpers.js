@@ -257,30 +257,44 @@ export function findRegistrationRowForSession(s, member, parentEmail, registrati
   return null
 }
 
+const GST_RATE = 0.05
+
+function computeGstBreakdown(subtotal) {
+  const base = Math.round(Number(subtotal) * 100) / 100
+  if (base <= 0) return { subtotal: 0, gstAmount: 0, total: 0 }
+  const gstAmount = Math.round(base * GST_RATE * 100) / 100
+  const total = Math.round((base + gstAmount) * 100) / 100
+  return { subtotal: base, gstAmount, total }
+}
+
 /**
  * Compute the price a member must pay for a session (mirrors backend logic).
- *  - Yearly members         → FREE
- *  - Semi-yearly members    → 50% off
- *  - Everyone else          → full price
+ *  - Annual members         → FREE
+ *  - Non-annual members     → 40% off (pay 60%)
+ *  - Non-Steamoji / none    → full price
  *  - session.price === 0    → FREE
+ *  - All paid amounts include 5% GST at checkout
  */
 export function computeMemberPrice(session, member) {
   const base = Number(session?.price) || 0
-  const currency = session?.currency || 'USD'
+  const currency = 'CAD'
   if (base <= 0) {
-    return { amount: 0, currency, isFree: true, membershipType: member?.membershipType || 'none' }
+    return { amount: 0, taxAmount: 0, totalAmount: 0, currency, isFree: true, membershipType: member?.membershipType || 'none' }
   }
   const type = (member && member.membershipType) || 'none'
   if (type === 'yearly')
-    return { amount: 0, currency, isFree: true, membershipType: 'yearly' }
-  if (type === 'semi-yearly')
-    return {
-      amount: Math.round((base / 2) * 100) / 100,
-      currency,
-      isFree: false,
-      membershipType: 'semi-yearly',
-    }
-  return { amount: base, currency, isFree: false, membershipType: 'none' }
+    return { amount: 0, taxAmount: 0, totalAmount: 0, currency, isFree: true, membershipType: 'yearly' }
+  let subtotal = base
+  if (type === 'semi-yearly') subtotal = Math.round(base * 0.6 * 100) / 100
+  const tax = computeGstBreakdown(subtotal)
+  return {
+    amount: tax.subtotal,
+    taxAmount: tax.gstAmount,
+    totalAmount: tax.total,
+    currency,
+    isFree: false,
+    membershipType: type === 'semi-yearly' ? 'semi-yearly' : 'none',
+  }
 }
 
 export function formatMoney(amount, currency = 'USD') {

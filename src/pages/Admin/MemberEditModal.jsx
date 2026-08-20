@@ -225,9 +225,9 @@ export default function MemberEditModal({
                 value={form.membershipType}
                 onChange={(e) => { onChange(e); setMembershipOverride(true) }}
               >
-                <option value="none">None (pays full price)</option>
-                <option value="semi-yearly">Semi-yearly (50% off)</option>
-                <option value="yearly">Yearly (free)</option>
+                <option value="none">Non-Steamoji (full price)</option>
+                <option value="semi-yearly">Non-annual (40% off)</option>
+                <option value="yearly">Annual (free)</option>
               </select>
               {membershipOverride && (
                 <div style={{ marginTop: 5, fontSize: 12, color: '#b97d00', display: 'flex', alignItems: 'center', gap: 5 }}>

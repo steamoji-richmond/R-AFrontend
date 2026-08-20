@@ -348,10 +348,10 @@ export async function updateAllRegistrationsForUser(userData, auth = 'attend') {
   return data
 }
 
-export async function createPaymentCheckout(registrationId) {
+export async function createPaymentCheckout(registrationId, { sendPaymentEmail = false } = {}) {
   const data = await postJson(
     'createPaymentLink',
-    { registrationId },
+    { registrationId, sendPaymentEmail: sendPaymentEmail || undefined },
     { registrationId }
   )
   if (!data.success) throw new Error(data.error || 'Failed to create checkout')
@@ -377,9 +377,11 @@ export async function confirmPayment(registrationId) {
  * branches — useful on the public sign-up form so closed locations don't
  * show up as choices.
  */
-export async function getBranches({ activeOnly = false, admin = false } = {}) {
+export async function getBranches({ activeOnly = false, signup = false, admin = false } = {}) {
   try {
-    const params = activeOnly ? { activeOnly: '1' } : {}
+    const params = {}
+    if (activeOnly) params.activeOnly = '1'
+    if (signup) params.signup = '1'
     const data = await getJson('getBranches', params, admin ? 'admin' : undefined)
     return (data && data.success && data.branches) || []
   } catch (err) {

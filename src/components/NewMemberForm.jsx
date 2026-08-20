@@ -29,7 +29,7 @@ export default function NewMemberForm({ parentEmail, onCreated, onCancel }) {
     let cancelled = false
     ;(async () => {
       try {
-        const list = await getBranches({ activeOnly: true })
+        const list = await getBranches({ signup: true })
         if (cancelled) return
         setBranches(Array.isArray(list) ? list : [])
         // Auto-select if only one active branch exists.
@@ -200,7 +200,6 @@ export default function NewMemberForm({ parentEmail, onCreated, onCancel }) {
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name}
-                  {b.code ? ` (${b.code})` : ''}
                   {b.city ? ` — ${b.city}` : ''}
                 </option>
               ))}

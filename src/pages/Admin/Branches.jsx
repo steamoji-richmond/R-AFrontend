@@ -139,6 +139,20 @@ export default function Branches({ onChange }) {
                         inactive
                       </span>
                     )}
+                    {b.active && b.showInSignup === false && (
+                      <span
+                        className="caption"
+                        style={{
+                          marginLeft: 8,
+                          padding: '2px 6px',
+                          borderRadius: 4,
+                          background: '#fef3c7',
+                          color: '#92400e',
+                        }}
+                      >
+                        hidden from sign-up
+                      </span>
+                    )}
                   </div>
                   <div className="caption muted">
                     {[b.city, b.region, b.country].filter(Boolean).join(', ') || '—'}
@@ -223,6 +237,7 @@ function BranchModal({ branch, onCancel, onSave }) {
     squareLocationId: branch?.squareLocationId || '',
     squareApplicationId: branch?.squareApplicationId || '',
     active: branch?.active !== false,
+    showInSignup: branch?.showInSignup !== false,
   })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -352,7 +367,7 @@ function BranchModal({ branch, onCancel, onSave }) {
               <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 Email
                 <span style={{ fontSize: '0.72rem', fontWeight: 400, color: '#6b7280' }}>
-                  Used as the sending address for all outgoing emails
+                  Used to send emails and receive admin payment alerts
                 </span>
               </span>
               <input type="email" name="email" value={form.email} onChange={onChange} placeholder="branch@gmail.com" />
@@ -374,7 +389,7 @@ function BranchModal({ branch, onCancel, onSave }) {
                 autoComplete="new-password"
               />
               <span style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: 4, display: 'block' }}>
-                Set a Gmail App Password for the address above. Google Account → Security → 2-Step Verification → App passwords → Create. Emails (registrations, reminders, cancellations) will be sent from this branch&rsquo;s own Gmail account.
+                Set a Gmail App Password for the address above. Google Account → Security → 2-Step Verification → App passwords → Create. Emails to parents and admin payment alerts are sent from this branch&rsquo;s Gmail account.
               </span>
             </label>
 
@@ -442,7 +457,19 @@ function BranchModal({ branch, onCancel, onSave }) {
                 checked={form.active}
                 onChange={onChange}
               />
-              <span>Active (show in sign-up + session forms)</span>
+              <span>Active (workshops + admin use)</span>
+            </label>
+            <label
+              className="admin-checkbox-row"
+              style={{ gridColumn: '1 / -1' }}
+            >
+              <input
+                type="checkbox"
+                name="showInSignup"
+                checked={form.showInSignup}
+                onChange={onChange}
+              />
+              <span>Show in public non-member sign-up (parents pick this location)</span>
             </label>
           </div>
           {error && (

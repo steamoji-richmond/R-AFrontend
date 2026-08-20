@@ -85,7 +85,7 @@ export default function EditSessionModal({ session, branches = [], onCancel, onS
               onChange={(e) => setPrice(e.target.value)}
             />
             <span className="caption">
-              Yearly members: free • Semi-yearly: 50% off • Others: full
+              Price before GST (5% added at Square checkout). Annual Membership: free • Non Annual Membership: 40% off • Non-Steamoji members: Pays full price
             </span>
           </label>
         </div>

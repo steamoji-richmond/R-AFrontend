@@ -82,7 +82,7 @@ export default function Register() {
 
   useEffect(() => {
     loadSessions()
-    getBranches({ activeOnly: false }).then((list) => {
+    getBranches({ activeOnly: true }).then((list) => {
       setBranches(Array.isArray(list) ? list : [])
     })
   }, [loadSessions])
@@ -599,7 +599,7 @@ export default function Register() {
                           const price = computeMemberPrice(s, selectedMember)
                           const priceLabel = price.isFree
                             ? 'Free'
-                            : formatMoney(price.amount, price.currency)
+                            : formatMoney(price.totalAmount, price.currency)
                           const btnLabel =
                             submittingSessionId === s.id
                               ? 'Registering...'
@@ -615,9 +615,10 @@ export default function Register() {
                                   {branchName ? `${branchName} • ` : ''}
                                   Seats left: {seatsLeft} / {sessionCapacity(s)} •{' '}
                                   Price: {priceLabel}
-                                  {price.membershipType === 'yearly' && ' (yearly member)'}
+                                  {!price.isFree && price.taxAmount > 0 && ' (incl. GST)'}
+                                  {price.membershipType === 'yearly' && ' (annual member)'}
                                   {price.membershipType === 'semi-yearly' &&
-                                    ' (50% — semi-yearly)'}
+                                    ' (40% off — non-annual)'}
                                 </div>
                               </div>
                               <button
@@ -696,7 +697,9 @@ export default function Register() {
                                       className="primary"
                                       onClick={async () => {
                                         try {
-                                          const checkout = await createPaymentCheckout(reg.id)
+                                          const checkout = await createPaymentCheckout(reg.id, {
+                                            sendPaymentEmail: true,
+                                          })
                                           if (checkout.checkoutUrl) window.location.href = checkout.checkoutUrl
                                         } catch (err) {
                                           alert('Could not load payment link: ' + err.message)
@@ -795,7 +798,7 @@ function PaymentConfirmModal({ session, price, onCancel, onConfirm }) {
   const timeStr = dt
     ? dt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
     : ''
-  const priceLabel = formatMoney(price.amount, price.currency)
+  const priceLabel = formatMoney(price.totalAmount, price.currency)
 
   return (
     <div
@@ -816,6 +819,30 @@ function PaymentConfirmModal({ session, price, onCancel, onConfirm }) {
         </p>
 
         {/* Price summary */}
+        {!price.isFree && price.taxAmount > 0 ? (
+          <div style={{
+            background: '#EFF6FF',
+            border: '2px solid #BFDBFE',
+            borderRadius: 8,
+            padding: '14px 18px',
+            marginBottom: 16,
+            fontSize: 14,
+            color: '#414042',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span>Subtotal</span>
+              <span>{formatMoney(price.amount, price.currency)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+              <span>GST (5%)</span>
+              <span>{formatMoney(price.taxAmount, price.currency)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '1.2rem', color: '#0072CE', borderTop: '1px solid #BFDBFE', paddingTop: 10 }}>
+              <span>Total due</span>
+              <span>{priceLabel}</span>
+            </div>
+          </div>
+        ) : (
         <div style={{
           background: '#EFF6FF',
           border: '2px solid #BFDBFE',
@@ -832,6 +859,7 @@ function PaymentConfirmModal({ session, price, onCancel, onConfirm }) {
             {priceLabel}
           </span>
         </div>
+        )}
 
         {/* No-refund notice */}
         <div style={{
