@@ -618,7 +618,7 @@ export default function Register() {
                                   {!price.isFree && price.taxAmount > 0 && ' (incl. GST)'}
                                   {price.membershipType === 'yearly' && ' (annual member)'}
                                   {price.membershipType === 'semi-yearly' &&
-                                    ' (40% off — non-annual)'}
+                                    ' (50% off — non-annual)'}
                                 </div>
                               </div>
                               <button
@@ -703,6 +703,7 @@ export default function Register() {
                                           if (checkout.checkoutUrl) window.location.href = checkout.checkoutUrl
                                         } catch (err) {
                                           alert('Could not load payment link: ' + err.message)
+                                          await refreshMemberData(searchedEmail.trim().toLowerCase(), true)
                                         }
                                       }}
                                     >
@@ -723,6 +724,7 @@ export default function Register() {
                                           }
                                         } catch (err) {
                                           alert('Could not verify payment: ' + (err.message || 'Unknown error'))
+                                          await refreshMemberData(searchedEmail.trim().toLowerCase(), true)
                                         }
                                       }}
                                     >

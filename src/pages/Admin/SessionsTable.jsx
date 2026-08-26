@@ -267,6 +267,7 @@ export default function SessionsTable({ sessions, branches = [], onRefresh }) {
         <SessionDetailModal
           session={viewing}
           onClose={() => setViewing(null)}
+          onChanged={() => onRefresh && onRefresh()}
         />
       )}
       {deleting && (

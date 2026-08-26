@@ -270,7 +270,7 @@ function computeGstBreakdown(subtotal) {
 /**
  * Compute the price a member must pay for a session (mirrors backend logic).
  *  - Annual members         → FREE
- *  - Non-annual members     → 40% off (pay 60%)
+ *  - Non-annual members     → 50% off (pay 50%)
  *  - Non-Steamoji / none    → full price
  *  - session.price === 0    → FREE
  *  - All paid amounts include 5% GST at checkout
@@ -285,7 +285,7 @@ export function computeMemberPrice(session, member) {
   if (type === 'yearly')
     return { amount: 0, taxAmount: 0, totalAmount: 0, currency, isFree: true, membershipType: 'yearly' }
   let subtotal = base
-  if (type === 'semi-yearly') subtotal = Math.round(base * 0.6 * 100) / 100
+  if (type === 'semi-yearly') subtotal = Math.round(base * 0.5 * 100) / 100
   const tax = computeGstBreakdown(subtotal)
   return {
     amount: tax.subtotal,

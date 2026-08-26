@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import AdminModal from '../../components/AdminModal.jsx'
-import { getRegistrationsFromSheets } from '../../api/sheets.js'
-import { formatMoney } from '../../utils/helpers.js'
+import { useApp } from '../../context/AppContext.jsx'
+import { deleteRegistrationFromSheets, getRegistrationsFromSheets } from '../../api/sheets.js'
+import { formatMoney, getRegistrationRecordId } from '../../utils/helpers.js'
 
 const TABS = ['Registrations', 'Attendance']
 
@@ -34,10 +35,12 @@ function paymentBadge(status, amount, currency) {
   )
 }
 
-export default function SessionDetailModal({ session, onClose }) {
+export default function SessionDetailModal({ session, onClose, onChanged }) {
+  const { showToast } = useApp()
   const [tab, setTab] = useState('Registrations')
   const [regs, setRegs] = useState([])
   const [loading, setLoading] = useState(true)
+  const [deletingId, setDeletingId] = useState('')
 
   useEffect(() => {
     getRegistrationsFromSheets(true)
@@ -59,6 +62,40 @@ export default function SessionDetailModal({ session, onClose }) {
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [session])
+
+  const removeRegistration = async (r) => {
+    const registrationId = getRegistrationRecordId(r)
+    if (!registrationId) {
+      alert('Registration ID not found')
+      return
+    }
+    const name = `${r.firstName || r['First Name'] || ''} ${r.lastName || r['Last Name'] || ''}`.trim() || 'this person'
+    const status = r.paymentStatus || 'not_required'
+    const extra =
+      status === 'paid'
+        ? ' They have already paid — contact them if a refund is needed.'
+        : status === 'pending'
+          ? ' Their awaiting-payment spot will be released so they can book another session.'
+          : ''
+    if (
+      !confirm(
+        `Remove ${name} from this session? They will be emailed that the registration was cancelled.${extra}`
+      )
+    ) {
+      return
+    }
+    setDeletingId(registrationId)
+    try {
+      await deleteRegistrationFromSheets(registrationId)
+      setRegs((prev) => prev.filter((row) => getRegistrationRecordId(row) !== registrationId))
+      showToast('Removed from session')
+      onChanged && onChanged()
+    } catch (err) {
+      alert('Error removing registration: ' + (err.message || 'Unknown error'))
+    } finally {
+      setDeletingId('')
+    }
+  }
 
   // Build attendance lookup from session.att
   const attBadges = new Set(
@@ -93,7 +130,7 @@ export default function SessionDetailModal({ session, onClose }) {
 
   return (
     <AdminModal onDismiss={onClose}>
-      <div className="card" style={{ minWidth: 340, maxWidth: 760, width: '90vw', padding: '24px 28px' }}>
+      <div className="card" style={{ minWidth: 340, maxWidth: 860, width: '90vw', padding: '24px 28px' }}>
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
           <div>
@@ -172,6 +209,7 @@ export default function SessionDetailModal({ session, onClose }) {
                       <th style={thS}>Parent Email</th>
                       <th style={thS}>Phone</th>
                       <th style={thS}>Payment</th>
+                      <th style={thS}></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -183,13 +221,24 @@ export default function SessionDetailModal({ session, onClose }) {
                       const status = r.paymentStatus || 'not_required'
                       const amount = Number(r.priceAmount || 0)
                       const currency = r.currency || 'CAD'
+                      const rid = getRegistrationRecordId(r)
                       return (
-                        <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                        <tr key={rid || i} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
                           <td style={{ ...tdS, color: '#999', width: 32 }}>{i + 1}</td>
                           <td style={{ ...tdS, fontWeight: 600 }}>{`${first} ${last}`.trim() || '—'}</td>
                           <td style={tdS}>{email}</td>
                           <td style={tdS}>{phone}</td>
                           <td style={tdS}>{paymentBadge(status, amount, currency)}</td>
+                          <td style={{ ...tdS, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <button
+                              className="red"
+                              style={{ padding: '5px 10px', fontSize: 12 }}
+                              disabled={deletingId === rid}
+                              onClick={() => removeRegistration(r)}
+                            >
+                              {deletingId === rid ? 'Removing…' : 'Remove'}
+                            </button>
+                          </td>
                         </tr>
                       )
                     })}

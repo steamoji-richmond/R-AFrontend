@@ -226,7 +226,7 @@ export default function MemberEditModal({
                 onChange={(e) => { onChange(e); setMembershipOverride(true) }}
               >
                 <option value="none">Non-Steamoji (full price)</option>
-                <option value="semi-yearly">Non-annual (40% off)</option>
+                <option value="semi-yearly">Non-annual (50% off)</option>
                 <option value="yearly">Annual (free)</option>
               </select>
               {membershipOverride && (

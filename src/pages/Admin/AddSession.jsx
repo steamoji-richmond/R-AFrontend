@@ -130,7 +130,7 @@ export default function AddSession({ branches = [], onAdded }) {
             step="0.01"
             value={price}
             onChange={(e) => setPrice(e.target.value)}
-            title="Full price before GST. Annual members free, non-annual 40% off, others full price. 5% GST added at checkout."
+            title="Full price before GST. Annual members free, non-annual 50% off, others full price. 5% GST added at checkout."
           />
         </label>
       </div>
@@ -143,7 +143,7 @@ export default function AddSession({ branches = [], onAdded }) {
         />
       </label>
       <p className="caption" style={{ marginTop: 6 }}>
-        Session price is before GST. Square checkout adds 5% GST. Annual Membership: free • Non Annual Membership: 40% off • Non-Steamoji members: Pays full price
+        Session price is before GST. Square checkout adds 5% GST. Annual Membership: free • Non Annual Membership: 50% off • Non-Steamoji members: Pays full price
       </p>
       <div className="row" style={{ marginTop: 8, gap: 8 }}>
         <button
