@@ -276,11 +276,15 @@ export async function deleteSessionFromSheets(sessionId, reason = '') {
   return data
 }
 
-export async function saveRegistrationToSheets(registrationData) {
-  const data = await postJson('register', registrationData)
+export async function saveRegistrationToSheets(registrationData, { admin = false } = {}) {
+  const data = await postJson('register', registrationData, null, admin ? 'admin' : undefined)
   if (!data.success) throw new Error(data.error || 'Failed to save')
   clearRegistrationsCache()
   return data
+}
+
+export async function adminAddRegistrationToSession(registrationData) {
+  return saveRegistrationToSheets({ ...registrationData, adminAdd: true }, { admin: true })
 }
 
 export async function updateRegistrationBadgeId(registrationId, badgeId) {

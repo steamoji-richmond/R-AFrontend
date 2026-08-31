@@ -1,10 +1,239 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import AdminModal from '../../components/AdminModal.jsx'
 import { useApp } from '../../context/AppContext.jsx'
-import { deleteRegistrationFromSheets, getRegistrationsFromSheets } from '../../api/sheets.js'
-import { formatMoney, getRegistrationRecordId } from '../../utils/helpers.js'
+import {
+  adminAddRegistrationToSession,
+  deleteRegistrationFromSheets,
+  getBranches,
+  getRegistrationsFromSheets,
+  getValidationData,
+} from '../../api/sheets.js'
+import { formatMoney, getRegistrationRecordId, sessionCapacity } from '../../utils/helpers.js'
 
 const TABS = ['Registrations', 'Attendance']
+
+function memberVisibleBranchIds(memberBranchIds, branchesById) {
+  const visible = new Set((memberBranchIds || []).filter(Boolean))
+  for (const bid of memberBranchIds || []) {
+    const branch = branchesById[bid]
+    for (const linked of branch?.linkedBranchIds || []) {
+      if (linked) visible.add(String(linked))
+    }
+  }
+  return visible
+}
+
+function memberCanAccessSession(member, session, branchesById) {
+  if (!session.branchId) return true
+  const memberBranches = member.branchIds || []
+  if (!memberBranches.length) return false
+  return memberVisibleBranchIds(memberBranches, branchesById).has(session.branchId)
+}
+
+function AddMemberSearch({ session, regs, branchesById, seatsLeft, onAdded }) {
+  const { showToast } = useApp()
+  const [query, setQuery] = useState('')
+  const [members, setMembers] = useState([])
+  const [loadingMembers, setLoadingMembers] = useState(true)
+  const [showDropdown, setShowDropdown] = useState(false)
+  const [addingId, setAddingId] = useState('')
+  const inputRef = useRef(null)
+  const dropdownRef = useRef(null)
+
+  const registeredMemberIds = useMemo(
+    () =>
+      new Set(
+        (regs || [])
+          .map((r) => String(r.memberId || '').trim())
+          .filter(Boolean)
+      ),
+    [regs]
+  )
+
+  useEffect(() => {
+    getValidationData()
+      .then((list) => setMembers(Array.isArray(list) ? list : []))
+      .catch(console.error)
+      .finally(() => setLoadingMembers(false))
+  }, [])
+
+  const eligibleMembers = useMemo(() => {
+    return (members || []).filter((m) => {
+      if (registeredMemberIds.has(String(m._id))) return false
+      return memberCanAccessSession(m, session, branchesById)
+    })
+  }, [members, registeredMemberIds, session, branchesById])
+
+  const suggestions = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return []
+    return eligibleMembers
+      .filter((m) => {
+        const name = `${m.firstName || ''} ${m.lastName || ''}`.toLowerCase()
+        const email = (m.parentEmail || '').toLowerCase()
+        const badge = (m.badgeId || '').toLowerCase()
+        return name.includes(q) || email.includes(q) || badge.includes(q)
+      })
+      .slice(0, 12)
+  }, [query, eligibleMembers])
+
+  useEffect(() => {
+    const onDocClick = (e) => {
+      if (
+        dropdownRef.current?.contains(e.target) ||
+        inputRef.current?.contains(e.target)
+      ) {
+        return
+      }
+      setShowDropdown(false)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [])
+
+  const addMember = async (member) => {
+    if (seatsLeft <= 0) {
+      alert('This session is full. Remove a registration or increase capacity first.')
+      return
+    }
+    const name = `${member.firstName || ''} ${member.lastName || ''}`.trim() || 'this member'
+    if (
+      !confirm(
+        `Add ${name} to this workshop? They will be registered immediately and the parent will receive a confirmation email.`
+      )
+    ) {
+      return
+    }
+
+    const dt = new Date(session.dt)
+    setAddingId(String(member._id))
+    try {
+      const result = await adminAddRegistrationToSession({
+        memberId: member._id,
+        badgeId: member.badgeId || '',
+        firstName: member.firstName || '',
+        lastName: member.lastName || '',
+        familyRole: member.familyRole || '',
+        age: member.age || '',
+        house: member.house || '',
+        level: member.level || '',
+        school: member.school || '',
+        parent: member.parent || '',
+        parentEmail: member.parentEmail || '',
+        sessionId: session.id,
+        sessionDate: dt.toISOString().slice(0, 10),
+        sessionTime: dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        sessionTopic: session.topic || '',
+        registeredBy: 'admin',
+        registeredDateAndTime: new Date().toISOString(),
+      })
+      showToast(`${name} added to session`)
+      setQuery('')
+      setShowDropdown(false)
+      onAdded && onAdded(result)
+    } catch (err) {
+      alert('Could not add member: ' + (err.message || 'Unknown error'))
+    } finally {
+      setAddingId('')
+    }
+  }
+
+  if (loadingMembers) {
+    return (
+      <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: 16 }}>
+        Loading members…
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ marginBottom: 20, padding: '14px 16px', background: '#f9fafb', borderRadius: 8, border: '1px solid #e5e7eb' }}>
+      <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 8 }}>Add member</div>
+      {seatsLeft <= 0 ? (
+        <div style={{ fontSize: '0.85rem', color: '#b91c1c' }}>
+          Session is full — no seats available.
+        </div>
+      ) : (
+        <>
+          <div style={{ fontSize: '0.82rem', color: '#666', marginBottom: 10 }}>
+            Search approved members linked to this branch. {seatsLeft} seat{seatsLeft === 1 ? '' : 's'} left.
+          </div>
+          <input
+            ref={inputRef}
+            type="search"
+            placeholder="Search by name, email, or badge ID…"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value)
+              setShowDropdown(true)
+            }}
+            onFocus={() => setShowDropdown(true)}
+            disabled={!!addingId}
+            style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #d1d5db' }}
+          />
+          {showDropdown && query.trim() && suggestions.length === 0 && (
+            <div style={{ marginTop: 8, fontSize: '0.85rem', color: '#888' }}>
+              No matching members found for this branch.
+            </div>
+          )}
+        </>
+      )}
+
+      {showDropdown &&
+        suggestions.length > 0 &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            style={{
+              position: 'fixed',
+              top: (inputRef.current?.getBoundingClientRect().bottom || 0) + 4,
+              left: inputRef.current?.getBoundingClientRect().left || 0,
+              width: inputRef.current?.getBoundingClientRect().width || 320,
+              zIndex: 10001,
+              background: '#fff',
+              border: '1px solid #ddd',
+              borderRadius: 8,
+              boxShadow: '0 6px 24px rgba(0,0,0,0.15)',
+              maxHeight: 280,
+              overflowY: 'auto',
+            }}
+          >
+            {suggestions.map((m) => {
+              const name = `${m.firstName || ''} ${m.lastName || ''}`.trim() || 'Unnamed'
+              const mid = String(m._id)
+              return (
+                <button
+                  key={mid}
+                  type="button"
+                  disabled={addingId === mid}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => addMember(m)}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '10px 14px',
+                    border: 'none',
+                    borderBottom: '1px solid #eee',
+                    background: '#fff',
+                    cursor: addingId ? 'default' : 'pointer',
+                  }}
+                >
+                  <div style={{ fontWeight: 600 }}>{addingId === mid ? 'Adding…' : name}</div>
+                  <div style={{ fontSize: '0.82rem', color: '#555', marginTop: 2 }}>
+                    {m.parentEmail || 'No email'}
+                    {m.badgeId ? ` • Badge: ${m.badgeId}` : ''}
+                  </div>
+                </button>
+              )
+            })}
+          </div>,
+          document.body
+        )}
+    </div>
+  )
+}
 
 function paymentBadge(status, amount, currency) {
   const map = {
@@ -41,16 +270,17 @@ export default function SessionDetailModal({ session, onClose, onChanged }) {
   const [regs, setRegs] = useState([])
   const [loading, setLoading] = useState(true)
   const [deletingId, setDeletingId] = useState('')
+  const [branchesById, setBranchesById] = useState({})
 
-  useEffect(() => {
-    getRegistrationsFromSheets(true)
+  const loadRegistrations = () => {
+    setLoading(true)
+    return getRegistrationsFromSheets(true)
       .then((all) => {
         const sid = session.id
         const mine = (all || []).filter((r) => {
           const rsid = r.sessionId || r['Session ID'] || ''
           return rsid === sid
         })
-        // Show awaiting-payment registrations first, then paid, then free
         mine.sort((a, b) => {
           const order = { pending: 0, paid: 1, not_required: 2 }
           const pa = order[a.paymentStatus] ?? 3
@@ -61,6 +291,17 @@ export default function SessionDetailModal({ session, onClose, onChanged }) {
       })
       .catch(console.error)
       .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadRegistrations()
+    getBranches({ admin: true })
+      .then((list) => {
+        const map = {}
+        for (const b of list || []) map[b.id] = b
+        setBranchesById(map)
+      })
+      .catch(console.error)
   }, [session])
 
   const removeRegistration = async (r) => {
@@ -121,6 +362,8 @@ export default function SessionDetailModal({ session, onClose, onChanged }) {
   const pendingCount = regs.filter((r) => r.paymentStatus === 'pending').length
   const freeCount = regs.filter((r) => !r.paymentStatus || r.paymentStatus === 'not_required').length
   const confirmedCount = paidCount + freeCount
+  const capacity = sessionCapacity(session)
+  const seatsLeft = Math.max(0, capacity - confirmedCount)
 
   const dt = new Date(session.dt)
   const sessionTitle = `${dt.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} — ${session.topic || 'Session'}`
@@ -198,9 +441,20 @@ export default function SessionDetailModal({ session, onClose, onChanged }) {
 
             {/* ── Registrations tab ── */}
             {tab === 'Registrations' && (
-              regs.length === 0 ? (
-                <div style={{ padding: 24, textAlign: 'center', color: '#888' }}>No registrations for this session.</div>
-              ) : (
+              <>
+                <AddMemberSearch
+                  session={session}
+                  regs={regs}
+                  branchesById={branchesById}
+                  seatsLeft={seatsLeft}
+                  onAdded={() => {
+                    loadRegistrations()
+                    onChanged && onChanged()
+                  }}
+                />
+                {regs.length === 0 ? (
+                  <div style={{ padding: 24, textAlign: 'center', color: '#888' }}>No registrations for this session.</div>
+                ) : (
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>
                     <tr>
@@ -244,7 +498,8 @@ export default function SessionDetailModal({ session, onClose, onChanged }) {
                     })}
                   </tbody>
                 </table>
-              )
+                )}
+              </>
             )}
 
             {/* ── Attendance tab ── */}

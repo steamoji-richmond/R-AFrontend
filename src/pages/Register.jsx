@@ -184,7 +184,7 @@ export default function Register() {
     [sessionsForMember]
   )
 
-  const eligibleItems = useMemo(() => {
+  const workshopItems = useMemo(() => {
     if (!selectedMember) return []
     const badgeId = selectedMember.badgeId || ''
     const parentEmail = searchedEmail
@@ -198,9 +198,16 @@ export default function Register() {
         registrations
       )
       const localReg = badgeId ? (s.reg || []).indexOf(badgeId) > -1 : false
-      if (seatsLeft > 0 && !regThisMonth && !localReg) {
-        items.push({ session: s, seatsLeft })
-      }
+      const alreadyOnSession =
+        localReg ||
+        !!findRegistrationRowForSession(s, selectedMember, parentEmail, registrations)
+
+      let disabledReason = null
+      if (alreadyOnSession) disabledReason = 'already_registered'
+      else if (regThisMonth) disabledReason = 'monthly_limit'
+      else if (seatsLeft <= 0) disabledReason = 'full'
+
+      items.push({ session: s, seatsLeft, disabledReason })
     }
     return items
   }, [selectedMember, searchedEmail, upcoming, registrations])
@@ -223,20 +230,29 @@ export default function Register() {
   }, [selectedMember, searchedEmail, sessions, registrations])
 
   // pagination
-  const eligibleTotalPages = Math.max(1, Math.ceil(eligibleItems.length / ELIGIBLE_PER_PAGE))
+  const eligibleTotalPages = Math.max(1, Math.ceil(workshopItems.length / ELIGIBLE_PER_PAGE))
   const registeredTotalPages = Math.max(1, Math.ceil(registeredItems.length / REGISTERED_PER_PAGE))
 
   useEffect(() => {
     setEligiblePage(1)
-  }, [eligibleItems.length])
+  }, [workshopItems.length])
   useEffect(() => {
     setRegisteredPage(1)
   }, [registeredItems.length])
 
-  const eligiblePageItems = eligibleItems.slice(
+  const eligiblePageItems = workshopItems.slice(
     (eligiblePage - 1) * ELIGIBLE_PER_PAGE,
     eligiblePage * ELIGIBLE_PER_PAGE
   )
+
+  const workshopButtonLabel = (disabledReason, price, sessionId) => {
+    if (submittingSessionId === sessionId) return 'Registering...'
+    if (disabledReason === 'full') return 'Full'
+    if (disabledReason === 'monthly_limit') return 'Already enrolled this month'
+    if (disabledReason === 'already_registered') return 'Already registered'
+    if (price.isFree) return 'Register'
+    return `Register • ${formatMoney(price.totalAmount, price.currency)}`
+  }
   const registeredPageItems = registeredItems.slice(
     (registeredPage - 1) * REGISTERED_PER_PAGE,
     registeredPage * REGISTERED_PER_PAGE
@@ -566,7 +582,7 @@ export default function Register() {
                     borderRadius: '6px 6px 0 0',
                   }}
                 >
-                  Eligible Sessions
+                  Upcoming Workshops
                 </button>
                 <button
                   className={`regTab ${activeTab === 'registered' ? 'active' : ''}`}
@@ -587,33 +603,33 @@ export default function Register() {
 
               {activeTab === 'eligible' && (
                 <div className="regTabContent">
-                  <h3 style={{ marginTop: 0 }}>Eligible Sessions</h3>
+                  <h3 style={{ marginTop: 0 }}>Upcoming Workshops</h3>
                   {loadingEligible ? (
                     <div className="caption muted">Loading sessions...</div>
-                  ) : eligibleItems.length === 0 ? (
-                    <div className="muted">No eligible sessions available.</div>
+                  ) : workshopItems.length === 0 ? (
+                    <div className="muted">No upcoming workshops available.</div>
                   ) : (
                     <>
                       <div className="list">
-                        {eligiblePageItems.map(({ session: s, seatsLeft }) => {
+                        {eligiblePageItems.map(({ session: s, seatsLeft, disabledReason }) => {
                           const price = computeMemberPrice(s, selectedMember)
                           const priceLabel = price.isFree
                             ? 'Free'
                             : formatMoney(price.totalAmount, price.currency)
-                          const btnLabel =
-                            submittingSessionId === s.id
-                              ? 'Registering...'
-                              : price.isFree
-                              ? 'Register'
-                              : `Register • ${priceLabel}`
+                          const btnLabel = workshopButtonLabel(disabledReason, price, s.id)
                           const branchName = branchById[s.branchId]?.name || ''
+                          const isDisabled = !!disabledReason || submittingSessionId === s.id
                           return (
-                            <div key={s.id} className="item">
+                            <div
+                              key={s.id}
+                              className="item"
+                              style={{ opacity: disabledReason === 'full' ? 0.75 : 1 }}
+                            >
                               <div>
                                 <div>{title(s)}</div>
                                 <div className="caption muted">
                                   {branchName ? `${branchName} • ` : ''}
-                                  Seats left: {seatsLeft} / {sessionCapacity(s)} •{' '}
+                                  Seats left: {Math.max(0, seatsLeft)} / {sessionCapacity(s)} •{' '}
                                   Price: {priceLabel}
                                   {!price.isFree && price.taxAmount > 0 && ' (incl. GST)'}
                                   {price.membershipType === 'yearly' && ' (annual member)'}
@@ -623,7 +639,16 @@ export default function Register() {
                               </div>
                               <button
                                 className="primary"
-                                disabled={submittingSessionId === s.id}
+                                disabled={isDisabled}
+                                title={
+                                  disabledReason === 'monthly_limit'
+                                    ? 'Each member can register for one workshop per calendar month'
+                                    : disabledReason === 'full'
+                                      ? 'This workshop has no seats left'
+                                      : disabledReason === 'already_registered'
+                                        ? 'This member is already registered for this workshop'
+                                        : ''
+                                }
                                 onClick={() => requestRegisterForSession(s)}
                               >
                                 {btnLabel}
@@ -635,7 +660,7 @@ export default function Register() {
                       <Pagination
                         page={eligiblePage}
                         totalPages={eligibleTotalPages}
-                        total={eligibleItems.length}
+                        total={workshopItems.length}
                         onPrev={() => setEligiblePage((p) => Math.max(1, p - 1))}
                         onNext={() => setEligiblePage((p) => Math.min(eligibleTotalPages, p + 1))}
                       />
